@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU Scheduling Simulator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>CPU Scheduling Simulator</h1>
+    </header>
+    <section>
+        <div>
+            <h2>Add New Process</h2>
+            Processes:
+            <input type="number" min="0" id="processID" placeholder="Process ID">
+            Arrival Time:
+            <input type="number" min="0" id="arrivalTime" placeholder="Arrival Time">
+            Burst Time:
+            <input type="number" min="0" id="burstTime" placeholder="Burst Time">
+            <input type="number" min="1" id="priority" placeholder="Priority" style="display: none;">
+            <button id="btnAddProcess">Add Process</button>
+        </div>
+
+        <div>
+            <h2>Scheduling Method</h2>
+            <select id="algorithmSelector">
+                <option value="FCFS">First Come First Served</option>
+                <option value="SJF">Shortest Job First</option>
+                <option value="Priority">Priority Scheduling</option>
+                <option value="RR">Round Robin</option>
+            </select>
+            <input type="number" min="1" id="timeQuantum" placeholder="Time Quantum" style="display: none;">
+            <button id="btnCalculate">Calculate</button>
+        </div>
+    </section>        
+    <h2>&nbsp Results</h2>
+    <section class="results">
+        <table id="tblResults">
+            <thead>
+                <tr>
+                    <th>Process ID</th>
+                    <th>Arrival Time</th>
+                    <th>Burst Time</th>
+                    <th>Priority</th>
+                    <th>Completed Time</th>
+                    <th>Waiting Time</th>
+                    <th>Turnaround Time</th>
+                </tr>
+            </thead>
+            <tbody> 
+            </tbody>
+        </table>
+        <div>
+            <h3>Average Waiting Time: <span id="averageWaitingTime">0</span></h3>
+        </div>
+        <div>
+            <h3>Average Turnaround Time: <span id="averageTurnaroundTime">0</span></h3>
+        </div>
+        <button id="btnClear">Clear Processes</button>
+    </section>
+    <script>
+        // Global array to store processes
+        let processes = [];
+
+        // Event listeners for buttons and input changes
+        document.getElementById('btnAddProcess').addEventListener('click', addProcess);
+        document.getElementById('btnCalculate').addEventListener('click', calculateScheduling);
+        document.getElementById('algorithmSelector').addEventListener('change', handleAlgorithmChange);
+        document.getElementById('btnClear').addEventListener('click', clearProcesses);
+
+        // Function to clear all processes and reset calculations
+        function clearProcesses() {
+            processes = [];
+            updateTable();
+            resetCalculations();
+            resetAveragesDisplay();
+        }
+
+        // Function to add a new process to the processes array
+        function addProcess() {
+            // Read input values
+            const processID = parseInt(document.getElementById('processID').value);
+            const arrivalTime = parseInt(document.getElementById('arrivalTime').value);
+            const burstTime = parseInt(document.getElementById('burstTime').value);
+            const priorityInput = document.getElementById('priority');
+            const priority = priorityInput.style.display !== 'none' ? parseInt(priorityInput.value) : null;
+
+            // Validate inputs more thoroughly
+            if (!isNaN(arrivalTime) && !isNaN(burstTime) && isUniqueID(processID)) {
+                // Add new process to the array
+                processes.push({
+                    id: processID,
+                    arrivalTime: arrivalTime,
+                    burstTime: burstTime,
+                    priority: priority,
+                    remainingBurstTime: burstTime,
+                    completionTime: 0,
+                    waitingTime: 0,
+                    turnaroundTime: 0
+                });
+
+                // Update the table with the new process
+                updateTable();
+
+                // Clear input fields after successful addition
+                document.getElementById('processID').value = '';
+                document.getElementById('arrivalTime').value = '';
+                document.getElementById('burstTime').value = '';
+                document.getElementById('priority').value = '';
+            } else {
+                alert("Please enter valid and unique Process ID, numeric Arrival Time, and numeric Burst Time.");
+            }
+        }
+
+        // Function to check if the process ID is unique
+        function isUniqueID(id) {
+            return !processes.some(process => process.id === id);
+        }
+
+        // Function to calculate scheduling based on selected algorithm
+        function calculateScheduling() {
+            const algorithm = document.getElementById('algorithmSelector').value;
+            resetCalculations();
+            
+            switch (algorithm) {
+                case 'FCFS':
+                    calculateFCFS();
+                    break;
+                case 'SJF':
+                    calculateSJF();
+                    break;
+                case 'Priority':
+                    calculatePriority();
+                    break;
+                case 'RR':
+                    const timeQuantum = parseInt(document.getElementById('timeQuantum').value);
+                    // Validate time quantum
+                    if (isNaN(timeQuantum) || timeQuantum < 1) {
+                        alert("Please enter a valid Time Quantum (a positive integer).");
+                        return;
+                    }
+                    calculateRoundRobin(timeQuantum);
+                    break;
+                default:
+                    console.error('Unknown algorithm selected');
+                    return;
+            }
+
+            // Compute and display averages
+            computeAverages();
+            // Update the table with the results
+            updateTable();
+        }
+
+        // Function to calculate scheduling for First Come First Served
+        function calculateFCFS() {
+            // Sort processes by arrival time to ensure proper order
+            processes.sort((a, b) => a.arrivalTime - b.arrivalTime);
+            let currentTime = 0;
+            processes.forEach(process => {
+                // Adjust start time if needed
+                if (process.arrivalTime > currentTime) {
+                    currentTime = process.arrivalTime;
+                }
+                // Calculate waiting and turnaround times
+                process.waitingTime = currentTime - process.arrivalTime;
+                process.turnaroundTime = process.waitingTime + process.burstTime;
+                // Update completion time and move to the next process
+                process.completionTime = currentTime + process.burstTime;
+                currentTime += process.burstTime;
+            });
+        }
+
+        // Function to calculate scheduling for Shortest Job First
+        function calculateSJF() {
+            // Copy processes array to avoid modifying the original array
+            let sjfProcesses = [...processes];
+            
+            // Sort processes by burst time and then by arrival time
+            sjfProcesses.sort((a, b) => {
+                if (a.burstTime === b.burstTime) {
+                    return a.arrivalTime - b.arrivalTime;
+                }
+                return a.burstTime - b.burstTime;
+            });
+            
+            let currentTime = 0;
+            sjfProcesses.forEach(process => {
+                // Adjust start time if needed
+                if (process.arrivalTime > currentTime) {
+                    currentTime = process.arrivalTime;
+                }
+                // Calculate waiting and turnaround times
+                process.waitingTime = currentTime - process.arrivalTime;
+                process.turnaroundTime = process.waitingTime + process.burstTime;
+                // Update completion time and move to the next process
+                process.completionTime = currentTime + process.burstTime;
+                currentTime += process.burstTime;
+            });
+            
+            // Update the original processes array with the calculated values
+            sjfProcesses.forEach(sjfProcess => {
+                let originalProcess = processes.find(p => p.id === sjfProcess.id);
+                originalProcess.completionTime = sjfProcess.completionTime;
+                originalProcess.waitingTime = sjfProcess.waitingTime;
+                originalProcess.turnaroundTime = sjfProcess.turnaroundTime;
+            });
+        }
+
+        // Function to calculate scheduling for Priority Scheduling
+        function calculatePriority() {
+            // Copy processes array to avoid modifying the original array
+            let priorityProcesses = [...processes];
+            
+            // Sort processes by priority and then by arrival time
+            priorityProcesses.sort((a, b) => {
+                if (a.priority === b.priority) {
+                    return a.arrivalTime - b.arrivalTime;
+                }
+                return a.priority - b.priority;
+            });
+            
+            let currentTime = 0;
+            priorityProcesses.forEach(process => {
+                // Adjust start time if needed
+                if (process.arrivalTime > currentTime) {
+                    currentTime = process.arrivalTime;
+                }
+                // Calculate waiting and turnaround times
+                process.waitingTime = currentTime - process.arrivalTime;
+                process.turnaroundTime = process.waitingTime + process.burstTime;
+                // Update completion time and move to the next process
+                process.completionTime = currentTime + process.burstTime;
+                currentTime += process.burstTime;
+            });
+            
+            // Update the original processes array with the calculated values
+            priorityProcesses.forEach(priorityProcess => {
+                let originalProcess = processes.find(p => p.id === priorityProcess.id);
+                originalProcess.completionTime = priorityProcess.completionTime;
+                originalProcess.waitingTime = priorityProcess.waitingTime;
+                originalProcess.turnaroundTime = priorityProcess.turnaroundTime;
+            });
+        }
+
+        // Function to calculate scheduling for Round Robin
+        function calculateRoundRobin(timeQuantum) {
+            let currentTime = 0;
+            let processQueue = processes.map(process => ({ ...process, executedTime: 0 }));
+
+            while (processQueue.some(p => p.remainingBurstTime > 0)) {
+                processQueue.forEach(process => {
+                    if (process.remainingBurstTime > 0 && process.arrivalTime <= currentTime) {
+                        // Execute the process for the time quantum or until completion
+                        let time = Math.min(process.remainingBurstTime, timeQuantum);
+                        process.remainingBurstTime -= time;
+                        process.executedTime += time;
+                        currentTime += time;
+
+                        // Update completion, waiting, and turnaround times if process is completed
+                        if (process.remainingBurstTime === 0) {
+                            process.completionTime = currentTime;
+                            process.waitingTime = currentTime - process.arrivalTime - process.executedTime;
+                            process.turnaroundTime = process.waitingTime + process.executedTime;
+                            // Update the original process with the calculated values
+                            let originalProcess = processes.find(p => p.id === process.id);
+                            originalProcess.completionTime = process.completionTime;
+                            originalProcess.waitingTime = process.waitingTime;
+                            originalProcess.turnaroundTime = process.turnaroundTime;
+                        }
+                    } else if (process.arrivalTime > currentTime) {
+                        // If no process is ready, advance time
+                        currentTime++;
+                    }
+                });
+            }
+        }
+
+        // Function to compute and display average waiting and turnaround times
+        function computeAverages() {
+            // Ensure there are processes to calculate averages
+            if (processes.length === 0) {
+                return;
+            }
+            let totalWaitingTime = 0;
+            let totalTurnaroundTime = 0;
+
+            processes.forEach(process => {
+                totalWaitingTime += process.waitingTime;
+                totalTurnaroundTime += process.turnaroundTime;
+            });
+
+            const averageWaitingTime = totalWaitingTime / processes.length;
+            const averageTurnaroundTime = totalTurnaroundTime / processes.length;
+
+            // Display averages in the HTML
+            document.getElementById('averageWaitingTime').textContent = averageWaitingTime.toFixed(2);
+            document.getElementById('averageTurnaroundTime').textContent = averageTurnaroundTime.toFixed(2);
+        }
+
+        // Function to reset averages display to zero
+        function resetAveragesDisplay() {
+            document.getElementById('averageWaitingTime').textContent = '0';
+            document.getElementById('averageTurnaroundTime').textContent = '0';
+        }
+
+        // Function to reset calculations for all processes
+        function resetCalculations() {
+            processes = processes.map(process => ({
+                ...process,
+                remainingBurstTime: process.burstTime,
+                completionTime: 0,
+                waitingTime: 0,
+                turnaroundTime: 0
+            }));
+        }
+
+        // Function to update the table with the results
+        function updateTable() {
+            const tbody = document.getElementById('tblResults').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = '';
+            processes.forEach(process => {
+                const row = tbody.insertRow();
+                row.innerHTML = `<td>${process.id}</td>
+                    <td>${process.arrivalTime}</td>
+                    <td>${process.burstTime}</td>
+                    <td>${process.priority !== null ? process.priority : '-'}</td>
+                    <td>${process.completionTime}</td>
+                    <td>${process.waitingTime}</td>
+                    <td>${process.turnaroundTime}</td>`;
+            });
+        }
+
+        // Function to handle changes in the selected scheduling algorithm
+        function handleAlgorithmChange() {
+            const algorithm = document.getElementById('algorithmSelector').value;
+            const timeQuantumInput = document.getElementById('timeQuantum');
+            const priorityInput = document.getElementById('priority');
+
+            // Show/hide time quantum and priority inputs based on the selected algorithm
+            if (algorithm === 'RR') {
+                timeQuantumInput.style.display = 'inline';
+                priorityInput.style.display = 'none';
+            } else if (algorithm === 'Priority') {
+                priorityInput.style.display = 'inline';
+                timeQuantumInput.style.display = 'none';
+            } else {
+                timeQuantumInput.style.display = 'none';
+                priorityInput.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
